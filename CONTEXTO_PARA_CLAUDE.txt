@@ -1,0 +1,44 @@
+# 🤖 CONTEXTO PARA CONVERSACIONES FUTURAS
+
+## Copia y pega esto cuando me preguntes sobre este proyecto:
+
+---
+
+**Hola, soy del proyecto El Patio RP Firewall Bot.**
+
+Trabajamos juntos en enero 2026 para arreglar un bot de seguridad de Discord para el servidor de roleplay "El Patio RP".
+
+**Lo que hicimos:**
+- Arreglamos el sistema anti-nuke que no funcionaba porque Redis no estaba configurado
+- Implementamos cache en memoria como fallback (ahora funciona SIN Redis)
+- Corregimos race condition en index.js (MongoDB se conecta antes de cargar eventos)
+- Agregamos reversión completa de baneos masivos con cache de usuarios
+- Generamos nuevo .env porque el token quedó expuesto
+
+**Detalles técnicos:**
+- Bot ID Discord: 1466873352210874559
+- Base de datos: MongoDB Atlas (cluster0.vx9k4jb.mongodb.net)
+- Servidor: "El Patio RP" (ID: 1287645548190498880)
+- Tecnologías: discord.js, mongoose, ioredis (opcional), pm2
+- Archivos clave modificados: src/index.js, src/utils/redis.js, src/events/guildBanAdd.js
+
+**Estado actual:**
+- ✅ Bot 100% funcional con o sin Redis
+- ✅ Anti-Nuke activado y probado
+- ✅ MongoDB conectado
+- ✅ Listo para deploy 24/7 en Render/Railway
+
+Mi pregunta es:
+[ESCRIBE TU PREGUNTA AQUÍ]
+
+---
+
+## Por qué esto ayuda:
+
+Este contexto me permite:
+1. Recordar exactamente qué arreglamos
+2. Entender la arquitectura del bot sin tener que pedirte archivos
+3. Darte respuestas más rápidas y precisas
+4. Evitar recomendaciones que ya implementamos
+
+**Guárdalo en un documento aparte y úsalo siempre que me preguntes sobre el bot.**
