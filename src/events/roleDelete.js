@@ -1,6 +1,7 @@
 const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const { checkRateLimit } = require('../utils/redis');
 const logger = require('../utils/logger');
+const lockdown = require('../utils/lockdown'); // 🔒 NUEVO
 const Guild = require('../models/Guild');
 
 module.exports = {
@@ -15,7 +16,7 @@ module.exports = {
         return;
       }
 
-      // Obtener quien eliminó el rol
+      // Obtener quién eliminó el rol
       const auditLogs = await guild.fetchAuditLogs({
         type: AuditLogEvent.RoleDelete,
         limit: 1
@@ -26,21 +27,24 @@ module.exports = {
 
       const executor = deleteLog.executor;
       
-      // Ignorar al bot y al owner del servidor
+      // Ignorar owner y bots
       if (executor.id === guild.ownerId || executor.bot) {
         return;
       }
 
-      // Verificar límite de rate
+      // Rate limit
       const limit = parseInt(process.env.MAX_ROLE_DELETES) || 3;
       const isExceeded = await checkRateLimit(executor.id, 'roleDelete', limit);
 
       if (isExceeded) {
-        logger.warn(`⚠️ Anti-Nuke activado: ${executor.tag} excedió el límite de eliminación de roles (${limit})`);
+        logger.warn(`⚠️ Anti-Nuke: ${executor.tag} excedió eliminación de roles (${limit})`);
 
-        // Intentar recrear el rol eliminado
+        // 🔒 LOCKDOWN AUTOMÁTICO
+        await lockdown(guild, 'Nuke detectado: eliminación masiva de roles');
+
+        // Recrear rol
         try {
-          const roleData = {
+          const recreatedRole = await guild.roles.create({
             name: role.name,
             color: role.color,
             hoist: role.hoist,
@@ -48,28 +52,25 @@ module.exports = {
             mentionable: role.mentionable,
             position: role.position,
             reason: 'Anti-Nuke: Restauración automática de rol eliminado'
-          };
+          });
 
-          const recreatedRole = await guild.roles.create(roleData);
           logger.success(`✅ Rol recreado: ${recreatedRole.name}`);
-
         } catch (error) {
           logger.error('❌ No se pudo recrear el rol:', error.message);
         }
 
-        // Remover permisos del atacante
+        // Castigar atacante
         try {
           const member = await guild.members.fetch(executor.id);
-          
-          // Remover todos los roles
-          await member.roles.set([], 'Anti-Nuke: Eliminación masiva de roles detectada');
-          
-          // Timeout de 28 días
-          await member.timeout(28 * 24 * 60 * 60 * 1000, 'Anti-Nuke: Eliminación masiva de roles');
-          
-          logger.success(`✅ Permisos removidos de ${executor.tag}`);
 
-          // Notificar en el canal de seguridad
+          await member.roles.set([], 'Anti-Nuke: Eliminación masiva de roles');
+          await member.timeout(
+            28 * 24 * 60 * 60 * 1000,
+            'Anti-Nuke: Eliminación masiva de roles'
+          );
+
+          logger.success(`🔒 Atacante neutralizado: ${executor.tag}`);
+
           const logChannel = guild.channels.cache.find(
             ch => ch.name === (process.env.LOGS_SEGURIDAD || 'seguridad-resumen')
           );
@@ -77,13 +78,13 @@ module.exports = {
           if (logChannel) {
             const embed = new EmbedBuilder()
               .setColor(0xFF0000)
-              .setTitle('🚨 ANTI-NUKE ACTIVADO - ELIMINACIÓN DE ROLES')
-              .setDescription(`**${executor.tag}** intentó eliminar roles masivamente`)
+              .setTitle('🚨 ANTI-NUKE + LOCKDOWN (ROLES)')
+              .setDescription(`**${executor.tag}** eliminó roles masivamente`)
               .addFields(
                 { name: '👤 Atacante', value: `${executor.tag} (${executor.id})`, inline: true },
-                { name: '🎭 Rol eliminado', value: `@${role.name}`, inline: true },
-                { name: '⚠️ Límite configurado', value: `${limit}`, inline: true },
-                { name: '🔄 Acción tomada', value: '✅ Rol recreado\n🔒 Roles removidos\n⏱️ Timeout de 28 días aplicado' }
+                { name: '🎭 Rol', value: `@${role.name}`, inline: true },
+                { name: '⚠️ Límite', value: `${limit}`, inline: true },
+                { name: '🔒 Acciones', value: 'Lockdown activado\nRol recreado\nRoles removidos\nTimeout 28 días' }
               )
               .setTimestamp()
               .setFooter({ text: 'El Patio RP Firewall' });
@@ -92,7 +93,7 @@ module.exports = {
           }
 
         } catch (error) {
-          logger.error('❌ Error al remover permisos del atacante:', error);
+          logger.error('❌ Error castigando atacante:', error);
         }
       }
 
