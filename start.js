@@ -1,7 +1,20 @@
 // ⚠️ CRÍTICO: Cargar dotenv PRIMERO, antes de cualquier otra cosa
 require('dotenv').config();
 
+const express = require('express'); // 👈 AÑADIR
 const logger = require('./src/utils/logger');
+
+// 🌐 HEALTH CHECK HTTP (OBLIGATORIO PARA RAILWAY)
+const app = express();
+
+app.get('/', (req, res) => {
+  res.status(200).send('OK');
+});
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  logger.info(`🌐 Health check activo en puerto ${PORT}`);
+});
 
 // Banner de inicio
 console.log(`
@@ -23,12 +36,4 @@ const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
   logger.error('❌ Faltan variables de entorno requeridas:');
-  missingVars.forEach(varName => {
-    logger.error(`   - ${varName}`);
-  });
-  logger.error('\n💡 Revisa tu archivo .env y asegúrate de que estén todas las variables.');
-  process.exit(1);
-}
-
-// Iniciar el bot
-require('./src/index.js');
+  mi
