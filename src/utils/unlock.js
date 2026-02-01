@@ -1,9 +1,9 @@
 const { ChannelType, EmbedBuilder } = require('discord.js');
 const logger = require('./logger');
 
-module.exports = async function unlock(guild, reason = 'Auto-unlock') {
+module.exports = async function unlock(guild, reason = 'Unlock manual') {
   try {
-    logger.info(`🔓 UNLOCK INICIADO: ${guild.name}`);
+    logger.info(`🔓 UNLOCK ACTIVADO: ${guild.name}`);
 
     for (const channel of guild.channels.cache.values()) {
       if (
@@ -33,13 +33,17 @@ module.exports = async function unlock(guild, reason = 'Auto-unlock') {
       const embed = new EmbedBuilder()
         .setColor(0x00ff00)
         .setTitle('🔓 LOCKDOWN DESACTIVADO')
-        .setDescription('El servidor ha sido desbloqueado automáticamente')
+        .setDescription('El servidor ha sido desbloqueado')
+        .addFields(
+          { name: '📍 Servidor', value: guild.name },
+          { name: '🛠️ Motivo', value: reason }
+        )
         .setTimestamp();
 
       await logChannel.send({ embeds: [embed] });
     }
 
-  } catch (error) {
-    logger.error('❌ Error en unlock', error);
+  } catch (e) {
+    logger.error('❌ Error en unlock:', e);
   }
 };
