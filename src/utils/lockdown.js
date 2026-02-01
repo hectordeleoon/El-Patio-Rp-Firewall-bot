@@ -1,5 +1,6 @@
-const { PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
+const { ChannelType, EmbedBuilder } = require('discord.js');
 const logger = require('./logger');
+const unlock = require('./unlock'); // 🔓 AUTO-UNLOCK
 
 let lastLockdown = 0; // ⏱️ cooldown global
 
@@ -19,7 +20,7 @@ module.exports = async function lockdown(guild, reason = 'Incidente de seguridad
     logger.error(`🚨 LOCKDOWN ACTIVADO: ${reason}`);
     logger.error(`🔒 Servidor bloqueado: ${guild.name}`);
 
-    // 🔒 Bloquear TODOS los canales (más seguro que tocar permisos globales)
+    // 🔒 Bloquear TODOS los canales
     for (const channel of guild.channels.cache.values()) {
       if (
         channel.type === ChannelType.GuildText ||
@@ -36,8 +37,8 @@ module.exports = async function lockdown(guild, reason = 'Incidente de seguridad
             },
             { reason: `Lockdown automático: ${reason}` }
           );
-        } catch (err) {
-          // ignorar errores de canales protegidos
+        } catch {
+          // ignorar canales protegidos
         }
       }
     }
@@ -62,6 +63,13 @@ module.exports = async function lockdown(guild, reason = 'Incidente de seguridad
 
       await logChannel.send({ embeds: [embed] });
     }
+
+    // 🔓 AUTO-UNLOCK
+    const unlockTime = parseInt(process.env.AUTO_UNLOCK_TIME) || 600000; // 10 min
+
+    setTimeout(() => {
+      unlock(guild, 'Auto-unlock tras incidente');
+    }, unlockTime);
 
   } catch (error) {
     logger.error('❌ Error activando lockdown', error);
