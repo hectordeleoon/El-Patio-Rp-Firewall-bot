@@ -1,10 +1,11 @@
 const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const { checkRateLimit } = require('../utils/redis');
 const logger = require('../utils/logger');
+const lockdown = require('../utils/lockdown'); // 🔒 NUEVO
 const Guild = require('../models/Guild');
 
-// ✅ ARREGLO: Cache de usuarios baneados para revertir TODOS los baneos de un ataque
-const bannedUsersCache = new Map(); // { executorId: [userId1, userId2, ...] }
+// Cache de baneos por atacante
+const bannedUsersCache = new Map();
 
 module.exports = {
   name: 'guildBanAdd',
@@ -18,7 +19,7 @@ module.exports = {
         return;
       }
 
-      // Obtener quien ejecutó el ban
+      // Obtener quién ejecutó el baneo
       const auditLogs = await guild.fetchAuditLogs({
         type: AuditLogEvent.MemberBanAdd,
         limit: 1
@@ -29,55 +30,56 @@ module.exports = {
 
       const executor = banLog.executor;
       
-      // Ignorar al bot y al owner del servidor
+      // Ignorar owner y bots
       if (executor.id === guild.ownerId || executor.bot) {
         return;
       }
 
-      // ✅ Agregar este baneo al cache del ejecutor
+      // Guardar baneo en cache
       if (!bannedUsersCache.has(executor.id)) {
         bannedUsersCache.set(executor.id, []);
       }
       bannedUsersCache.get(executor.id).push(ban.user.id);
 
-      // Verificar límite de rate
+      // Rate limit
       const limit = parseInt(process.env.MAX_BANS) || 3;
       const isExceeded = await checkRateLimit(executor.id, 'ban', limit);
 
       if (isExceeded) {
-        logger.warn(`⚠️ Anti-Nuke activado: ${executor.tag} excedió el límite de baneos (${limit})`);
+        logger.warn(`⚠️ Anti-Nuke: ${executor.tag} excedió límite de baneos (${limit})`);
 
-        // ✅ Revertir TODOS los baneos del atacante (no solo el último)
+        // 🔒 LOCKDOWN AUTOMÁTICO
+        await lockdown(guild, 'Nuke detectado: baneo masivo');
+
+        // Revertir TODOS los baneos
         const bannedUsers = bannedUsersCache.get(executor.id) || [];
-        
+
         for (const userId of bannedUsers) {
           try {
-            await guild.members.unban(userId, 'Anti-Nuke: Reversión automática de baneo masivo');
-            logger.success(`✅ Usuario ${userId} desbaneado automáticamente`);
+            await guild.members.unban(
+              userId,
+              'Anti-Nuke: Reversión automática de baneo masivo'
+            );
+            logger.success(`✅ Usuario ${userId} desbaneado`);
           } catch (error) {
-            logger.error(`❌ No se pudo desbanear a ${userId}:`, error.message);
+            logger.error(`❌ No se pudo desbanear ${userId}:`, error.message);
           }
         }
 
-        // Limpiar el cache de este ejecutor
         bannedUsersCache.delete(executor.id);
 
-        // Remover permisos del atacante
+        // Castigar atacante
         try {
           const member = await guild.members.fetch(executor.id);
-          
-          // Guardar roles actuales antes de removerlos
-          const currentRoles = member.roles.cache.filter(r => r.id !== guild.id);
-          
-          // Remover todos los roles
-          await member.roles.set([], 'Anti-Nuke: Baneo masivo detectado');
-          
-          // Timeout de 28 días (máximo permitido)
-          await member.timeout(28 * 24 * 60 * 60 * 1000, 'Anti-Nuke: Baneo masivo detectado');
-          
-          logger.success(`✅ Permisos removidos de ${executor.tag}`);
 
-          // Notificar en el canal de seguridad
+          await member.roles.set([], 'Anti-Nuke: Baneo masivo');
+          await member.timeout(
+            28 * 24 * 60 * 60 * 1000,
+            'Anti-Nuke: Baneo masivo'
+          );
+
+          logger.success(`🔒 Atacante neutralizado: ${executor.tag}`);
+
           const logChannel = guild.channels.cache.find(
             ch => ch.name === (process.env.LOGS_SEGURIDAD || 'seguridad-resumen')
           );
@@ -85,13 +87,13 @@ module.exports = {
           if (logChannel) {
             const embed = new EmbedBuilder()
               .setColor(0xFF0000)
-              .setTitle('🚨 ANTI-NUKE ACTIVADO - BANEO MASIVO')
-              .setDescription(`**${executor.tag}** intentó realizar un baneo masivo`)
+              .setTitle('🚨 ANTI-NUKE + LOCKDOWN (BANEO MASIVO)')
+              .setDescription(`**${executor.tag}** intentó un baneo masivo`)
               .addFields(
                 { name: '👤 Atacante', value: `${executor.tag} (${executor.id})`, inline: true },
-                { name: '📊 Baneos detectados', value: `${bannedUsers.length}`, inline: true },
-                { name: '⚠️ Límite configurado', value: `${limit}`, inline: true },
-                { name: '🔄 Acción tomada', value: `✅ ${bannedUsers.length} usuarios desbaneados\n🔒 Roles removidos\n⏱️ Timeout de 28 días aplicado` }
+                { name: '📊 Baneos revertidos', value: `${bannedUsers.length}`, inline: true },
+                { name: '⚠️ Límite', value: `${limit}`, inline: true },
+                { name: '🔒 Acciones', value: 'Lockdown activado\nUsuarios desbaneados\nRoles removidos\nTimeout 28 días' }
               )
               .setTimestamp()
               .setFooter({ text: 'El Patio RP Firewall' });
@@ -100,7 +102,7 @@ module.exports = {
           }
 
         } catch (error) {
-          logger.error('❌ Error al remover permisos del atacante:', error);
+          logger.error('❌ Error castigando atacante:', error);
         }
       }
 
@@ -110,7 +112,7 @@ module.exports = {
   }
 };
 
-// Limpiar cache cada 5 minutos para evitar acumulación
+// Limpieza de cache cada 5 min
 setInterval(() => {
   bannedUsersCache.clear();
 }, 5 * 60 * 1000);
