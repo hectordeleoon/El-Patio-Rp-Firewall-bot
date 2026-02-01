@@ -26,24 +26,18 @@ module.exports = {
       const deleteLog = auditLogs.entries.first();
       if (!deleteLog) return;
 
-     const executor = deleteLog.executor;
-if (!executor) return;
+      const executor = deleteLog.executor;
+      if (!executor) return;
 
-// 🧠 WHITELIST DE ADMINS
-const whitelist = (process.env.WHITELIST_ADMINS || '').split(',');
-
-if (whitelist.includes(executor.id)) {
-  logger.info(`🧠 Acción permitida (whitelist): ${executor.tag}`);
-  return;
-}
-
-      // 🧠 WHITELIST
+      // 🧠 WHITELIST DE ADMINS (SOLO UNA VEZ)
       const whitelist = (process.env.WHITELIST_ADMINS || '').split(',');
+
       if (whitelist.includes(executor.id)) {
-        logger.info(`🧠 Whitelist: ${executor.tag}`);
+        logger.info(`🧠 Acción permitida (whitelist): ${executor.tag}`);
         return;
       }
 
+      // Ignorar owner y bots
       if (executor.id === guild.ownerId || executor.bot) return;
 
       const limit = parseInt(process.env.MAX_CHANNEL_DELETES, 10) || 3;
@@ -52,7 +46,7 @@ if (whitelist.includes(executor.id)) {
 
       logger.warn(`⚠️ Anti-Nuke: ${executor.tag} eliminó demasiados canales`);
 
-      // ⏱️ COOLDOWN LOCKDOWN
+      // 🔒 LOCKDOWN con cooldown
       if (Date.now() - lastLockdown > LOCKDOWN_COOLDOWN) {
         lastLockdown = Date.now();
         await lockdown(guild, 'Nuke detectado: eliminación masiva de canales');
@@ -61,7 +55,10 @@ if (whitelist.includes(executor.id)) {
       // Castigo
       const member = await guild.members.fetch(executor.id);
       await member.roles.set([], 'Anti-Nuke');
-      await member.timeout(28 * 24 * 60 * 60 * 1000, 'Anti-Nuke');
+      await member.timeout(
+        28 * 24 * 60 * 60 * 1000,
+        'Anti-Nuke: eliminación masiva de canales'
+      );
 
       // 🚨 LOG CRÍTICO
       const logChannel = guild.channels.cache.find(
@@ -72,7 +69,7 @@ if (whitelist.includes(executor.id)) {
         const embed = new EmbedBuilder()
           .setColor(0xff0000)
           .setTitle('🚨 LOCKDOWN ACTIVADO')
-          .setDescription(`Eliminación masiva de canales`)
+          .setDescription('Eliminación masiva de canales')
           .addFields(
             { name: '👤 Atacante', value: executor.tag },
             { name: '📊 Límite', value: `${limit}` }
