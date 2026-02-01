@@ -1,8 +1,11 @@
 const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const { checkRateLimit } = require('../utils/redis');
 const logger = require('../utils/logger');
-const lockdown = require('../utils/lockdown'); // 🔒 LOCKDOWN
+const lockdown = require('../utils/lockdown');
 const Guild = require('../models/Guild');
+
+let lastLockdown = 0;
+const LOCKDOWN_COOLDOWN = 5 * 60 * 1000; // 5 min
 
 module.exports = {
   name: 'channelDelete',
@@ -15,7 +18,6 @@ module.exports = {
       const guildConfig = await Guild.findOne({ guildId: guild.id });
       if (!guildConfig || !guildConfig.antiNuke?.enabled) return;
 
-      // Obtener quién eliminó el canal
       const auditLogs = await guild.fetchAuditLogs({
         type: AuditLogEvent.ChannelDelete,
         limit: 1
@@ -27,90 +29,53 @@ module.exports = {
       const executor = deleteLog.executor;
       if (!executor) return;
 
-      // Ignorar owner y bots
+      // 🧠 WHITELIST
+      const whitelist = (process.env.WHITELIST_ADMINS || '').split(',');
+      if (whitelist.includes(executor.id)) {
+        logger.info(`🧠 Whitelist: ${executor.tag}`);
+        return;
+      }
+
       if (executor.id === guild.ownerId || executor.bot) return;
 
-      // Verificar límite
       const limit = parseInt(process.env.MAX_CHANNEL_DELETES, 10) || 3;
       const isExceeded = await checkRateLimit(executor.id, 'channelDelete', limit);
-
       if (!isExceeded) return;
 
-      logger.warn(
-        `⚠️ Anti-Nuke: ${executor.tag} excedió eliminación de canales (${limit})`
-      );
+      logger.warn(`⚠️ Anti-Nuke: ${executor.tag} eliminó demasiados canales`);
 
-      // 🔒 LOCKDOWN AUTOMÁTICO
-      await lockdown(
-        guild,
-        'Nuke detectado: eliminación masiva de canales'
-      );
-
-      // Intentar recrear el canal eliminado
-      try {
-        await guild.channels.create({
-          name: channel.name,
-          type: channel.type,
-          topic: channel.topic ?? null,
-          nsfw: channel.nsfw ?? false,
-          bitrate: channel.bitrate ?? undefined,
-          userLimit: channel.userLimit ?? undefined,
-          rateLimitPerUser: channel.rateLimitPerUser ?? 0,
-          parent: channel.parentId ?? null,
-          permissionOverwrites: channel.permissionOverwrites.cache.map(o => ({
-            id: o.id,
-            allow: o.allow.bitfield,
-            deny: o.deny.bitfield
-          })),
-          reason: 'Anti-Nuke: Restauración automática de canal eliminado'
-        });
-
-        logger.success(`✅ Canal recreado: ${channel.name}`);
-      } catch (error) {
-        logger.error('❌ No se pudo recrear el canal:', error.message);
+      // ⏱️ COOLDOWN LOCKDOWN
+      if (Date.now() - lastLockdown > LOCKDOWN_COOLDOWN) {
+        lastLockdown = Date.now();
+        await lockdown(guild, 'Nuke detectado: eliminación masiva de canales');
       }
 
-      // Castigar atacante
-      try {
-        const member = await guild.members.fetch(executor.id);
+      // Castigo
+      const member = await guild.members.fetch(executor.id);
+      await member.roles.set([], 'Anti-Nuke');
+      await member.timeout(28 * 24 * 60 * 60 * 1000, 'Anti-Nuke');
 
-        await member.roles.set([], 'Anti-Nuke: Eliminación masiva de canales');
-        await member.timeout(
-          28 * 24 * 60 * 60 * 1000,
-          'Anti-Nuke: Eliminación masiva de canales'
-        );
+      // 🚨 LOG CRÍTICO
+      const logChannel = guild.channels.cache.find(
+        ch => ch.name === (process.env.LOGS_CRITICOS || 'firewall-alertas')
+      );
 
-        logger.success(`🔒 Atacante neutralizado: ${executor.tag}`);
+      if (logChannel) {
+        const embed = new EmbedBuilder()
+          .setColor(0xff0000)
+          .setTitle('🚨 LOCKDOWN ACTIVADO')
+          .setDescription(`Eliminación masiva de canales`)
+          .addFields(
+            { name: '👤 Atacante', value: executor.tag },
+            { name: '📊 Límite', value: `${limit}` }
+          )
+          .setTimestamp();
 
-        // Log de seguridad
-        const logChannel = guild.channels.cache.find(
-          ch => ch.name === (process.env.LOGS_SEGURIDAD || 'seguridad-resumen')
-        );
-
-        if (logChannel) {
-          const embed = new EmbedBuilder()
-            .setColor(0xff0000)
-            .setTitle('🚨 ANTI-NUKE + LOCKDOWN ACTIVADO')
-            .setDescription(`**${executor.tag}** eliminó canales masivamente`)
-            .addFields(
-              { name: '👤 Atacante', value: `${executor.tag} (${executor.id})`, inline: true },
-              { name: '📺 Canal', value: `#${channel.name}`, inline: true },
-              { name: '⚠️ Límite', value: `${limit}`, inline: true },
-              {
-                name: '🔒 Acciones',
-                value: 'Lockdown del servidor\nCanal recreado\nRoles removidos\nTimeout 28 días'
-              }
-            )
-            .setTimestamp()
-            .setFooter({ text: 'El Patio RP Firewall' });
-
-          await logChannel.send({ embeds: [embed] });
-        }
-      } catch (error) {
-        logger.error('❌ Error castigando atacante:', error);
+        await logChannel.send({ embeds: [embed] });
       }
-    } catch (error) {
-      logger.error('❌ Error en channelDelete:', error);
+
+    } catch (e) {
+      logger.error('❌ Error en channelDelete:', e);
     }
   }
 };
