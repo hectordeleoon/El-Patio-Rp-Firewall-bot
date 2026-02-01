@@ -1,10 +1,9 @@
-// ⚠️ CRÍTICO: Cargar dotenv PRIMERO, antes de cualquier otra cosa
 require('dotenv').config();
 
-const express = require('express'); // 👈 AÑADIR
+const express = require('express');
 const logger = require('./src/utils/logger');
 
-// 🌐 HEALTH CHECK HTTP (OBLIGATORIO PARA RAILWAY)
+// 🌐 HEALTH CHECK (SIEMPRE VIVO)
 const app = express();
 
 app.get('/', (req, res) => {
@@ -16,24 +15,28 @@ app.listen(PORT, () => {
   logger.info(`🌐 Health check activo en puerto ${PORT}`);
 });
 
-// Banner de inicio
+// Banner
 console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
 ║   🛡️  EL PATIO RP FIREWALL BOT v2.0                      ║
 ║                                                           ║
 ║   Sistema de protección anti-nuke y anti-spam            ║
-║   Desarrollado para El Patio RP                          ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 `);
 
 logger.info('🚀 Iniciando El Patio RP Firewall Bot...');
 
-// Verificar variables de entorno críticas
+// ❗ VALIDAR VARIABLES SOLO PARA DISCORD
 const requiredEnvVars = ['DISCORD_TOKEN', 'MONGODB_URI', 'GUILD_ID'];
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 
 if (missingVars.length > 0) {
-  logger.error('❌ Faltan variables de entorno requeridas:');
-  mi
+  logger.error('❌ Faltan variables críticas para Discord:');
+  missingVars.forEach(v => logger.error(`   - ${v}`));
+  logger.error('⚠️ El bot Discord NO se iniciará, pero el health check sigue activo.');
+} else {
+  // 🤖 SOLO iniciar Discord si todo está OK
+  require('./src/index.js');
+}
