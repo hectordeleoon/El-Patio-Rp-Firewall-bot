@@ -26,8 +26,16 @@ module.exports = {
       const deleteLog = auditLogs.entries.first();
       if (!deleteLog) return;
 
-      const executor = deleteLog.executor;
-      if (!executor) return;
+     const executor = deleteLog.executor;
+if (!executor) return;
+
+// 🧠 WHITELIST DE ADMINS
+const whitelist = (process.env.WHITELIST_ADMINS || '').split(',');
+
+if (whitelist.includes(executor.id)) {
+  logger.info(`🧠 Acción permitida (whitelist): ${executor.tag}`);
+  return;
+}
 
       // 🧠 WHITELIST
       const whitelist = (process.env.WHITELIST_ADMINS || '').split(',');
