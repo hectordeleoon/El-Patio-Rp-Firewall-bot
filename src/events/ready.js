@@ -2,11 +2,13 @@ const logger = require('../utils/logger');
 const Guild = require('../models/Guild');
 
 module.exports = {
-  name: 'ready',
+  name: 'clientReady', // ← CAMBIO: usar clientReady en lugar de ready
   once: true,
   
   async execute(client) {
     try {
+      // ❌ INCORRECTO: logger.success`✅ Bot conectado...`
+      // ✅ CORRECTO:
       logger.success(`✅ Bot conectado como ${client.user.tag}`);
       logger.info(`📊 Sirviendo a ${client.guilds.cache.size} servidor(es)`);
       
@@ -31,7 +33,7 @@ module.exports = {
           logger.success(`✅ Configuración creada para ${guild.name}`);
         }
       }
-
+      
       logger.success('🛡️ El Patio RP Firewall está activo y protegiendo el servidor');
       
     } catch (error) {
