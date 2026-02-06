@@ -17,11 +17,7 @@ const client = new Client({
 });
 
 // ✅ EVENTO READY - Inicializar logger cuando el bot esté listo
-// ❌ ANTES: client.once('ready', async () => {
-// ✅ AHORA: Usar 'clientReady' para evitar el deprecation warning
 client.once('clientReady', async () => {
-  // ❌ ANTES: logger.success`✅ Bot conectado como ${client.user.tag}`);
-  // ✅ AHORA:
   logger.success(`✅ Bot conectado como ${client.user.tag}`);
   
   // ✅ CRÍTICO: Inicializar el logger de Discord
@@ -29,8 +25,6 @@ client.once('clientReady', async () => {
   await logger.init(client);
   
   logger.success('🚀 Bot completamente operativo');
-  // ❌ ANTES: logger.success`📊 Servidores: ${client.guilds.cache.size}`);
-  // ✅ AHORA:
   logger.success(`📊 Servidores: ${client.guilds.cache.size}`);
   logger.success(`👥 Usuarios: ${client.users.cache.size}`);
 });
