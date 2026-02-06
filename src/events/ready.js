@@ -2,15 +2,11 @@ const logger = require('../utils/logger');
 const Guild = require('../models/Guild');
 
 module.exports = {
-  // ❌ ANTES: name: 'ready',
-  // ✅ AHORA: usar 'clientReady'
   name: 'clientReady',
   once: true,
   
   async execute(client) {
     try {
-      // ❌ ANTES: logger.success`✅ Bot conectado como ${client.user.tag}`);
-      // ✅ AHORA:
       logger.success(`✅ Bot conectado como ${client.user.tag}`);
       logger.info(`📊 Sirviendo a ${client.guilds.cache.size} servidor(es)`);
       
