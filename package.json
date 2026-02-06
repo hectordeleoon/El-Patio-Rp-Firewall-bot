@@ -2,27 +2,40 @@
   "name": "el-patio-rp-firewall",
   "version": "2.0.0",
   "description": "Bot de seguridad anti-nuke y anti-spam para El Patio RP",
-  "main": "src/index.js",
+  "main": "start.js",
   "scripts": {
     "start": "node start.js",
     "dev": "NODE_ENV=development nodemon start.js",
     "setup": "node setup.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "echo 'No linter configured'",
+    "test": "echo 'Error: no test specified' && exit 1"
   },
   "keywords": [
     "discord",
     "bot",
     "anti-nuke",
+    "anti-spam",
     "security",
-    "roleplay"
+    "firewall",
+    "roleplay",
+    "moderation",
+    "discord.js"
   ],
   "author": "El Patio RP",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hectordeleoon/El-Patio-Rp-Firewall.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hectordeleoon/El-Patio-Rp-Firewall/issues"
+  },
+  "homepage": "https://github.com/hectordeleoon/El-Patio-Rp-Firewall#readme",
   "dependencies": {
     "chalk": "^4.1.2",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.7",
-    "express": "^5.2.1",
+    "express": "^4.21.2",
     "ioredis": "^5.4.2",
     "mongoose": "^8.9.3"
   },
@@ -30,6 +43,7 @@
     "nodemon": "^3.1.9"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }
