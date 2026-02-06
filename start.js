@@ -10,8 +10,6 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-  // ❌ ANTES: logger.info`🌐 Health check activo en puerto ${PORT}`);
-  // ✅ AHORA:
   logger.info(`🌐 Health check activo en puerto ${PORT}`);
 });
 
@@ -34,8 +32,6 @@ const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 
 if (missingVars.length > 0) {
   logger.error('❌ Faltan variables críticas para Discord:');
-  // ❌ ANTES: missingVars.forEach(v => logger.error`   - ${v}`));
-  // ✅ AHORA:
   missingVars.forEach(v => logger.error(`   - ${v}`));
   logger.error('⚠️ El bot Discord NO se iniciará, pero el health check sigue activo.');
 } else {
