@@ -18,8 +18,8 @@ class Logger {
     try {
       const guild = await client.guilds.fetch(process.env.GUILD_ID);
       
-      // Buscar canales por nombre
-      const channelNames = {
+      // Buscar canales por ID o nombre
+      const channelConfig = {
         discord: process.env.LOGS_DISCORD || 'LOGS_DISCORD',
         seguridad: process.env.LOGS_SEGURIDAD || 'seguridad-resumen',
         baneos: process.env.LOGS_BANEOS || 'BANEOS',
@@ -27,24 +27,38 @@ class Logger {
         roles: process.env.LOGS_ROLES || 'ROLLS-REMOVIDOS',
         joins: process.env.LOGS_JOINS || 'JOINS',
         left: process.env.LOGS_LEFT || 'LEFT',
-        firewall: 'firewall-alertas', // Canal para alertas críticas del firewall
-        criticos: 'logs-criticos' // Canal para eventos críticos
+        firewall: process.env.LOGS_ALERTAS || 'firewall-alertas',
+        criticos: process.env.LOGS_CRITICOS || 'logs-criticos'
       };
 
       // Obtener todos los canales del servidor
       const allChannels = await guild.channels.fetch();
       
-      // Buscar y guardar cada canal
-      for (const [key, name] of Object.entries(channelNames)) {
-        const channel = allChannels.find(ch => 
-          ch.name.toLowerCase() === name.toLowerCase()
-        );
+      // Buscar y guardar cada canal (por ID o nombre)
+      for (const [key, value] of Object.entries(channelConfig)) {
+        let channel;
+        
+        // Intentar buscar por ID primero (si parece un ID de Discord)
+        if (/^\d+$/.test(value)) {
+          try {
+            channel = await guild.channels.fetch(value);
+          } catch {
+            channel = null;
+          }
+        }
+        
+        // Si no se encontró por ID, buscar por nombre
+        if (!channel) {
+          channel = allChannels.find(ch => 
+            ch.name.toLowerCase() === value.toLowerCase()
+          );
+        }
         
         if (channel) {
           this.channels[key] = channel;
-          this.success(`✅ Canal de logs encontrado: ${name} (${channel.id})`);
+          this.success(`✅ Canal de logs encontrado: ${channel.name} (${channel.id})`);
         } else {
-          this.warn(`⚠️ Canal de logs NO encontrado: ${name}`);
+          this.warn(`⚠️ Canal de logs NO encontrado: ${value}`);
         }
       }
 
