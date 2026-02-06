@@ -16,19 +16,32 @@ const client = new Client({
   partials: [Partials.Channel, Partials.GuildMember, Partials.User]
 });
 
-// ✅ ARREGLO PRINCIPAL: Inicialización con async/await
+// ✅ EVENTO READY - Inicializar logger cuando el bot esté listo
+client.once('ready', async () => {
+  logger.success(`✅ Bot conectado como ${client.user.tag}`);
+  
+  // ✅ CRÍTICO: Inicializar el logger de Discord
+  logger.info('🔧 Inicializando sistema de logs de Discord...');
+  await logger.init(client);
+  
+  logger.success('🚀 Bot completamente operativo');
+  logger.success(`📊 Servidores: ${client.guilds.cache.size}`);
+  logger.success(`👥 Usuarios: ${client.users.cache.size}`);
+});
+
+// ✅ Inicialización con async/await
 async function startBot() {
   try {
     // 1. Conectar MongoDB PRIMERO
     logger.info('🔌 Conectando a MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI);
     logger.success('✅ MongoDB conectado correctamente');
-
+    
     // 2. Cargar eventos DESPUÉS de que MongoDB esté listo
     logger.info('📂 Cargando eventos...');
     await eventHandler(client);
     logger.success('✅ Eventos cargados');
-
+    
     // 3. Login a Discord
     logger.info('🤖 Iniciando sesión en Discord...');
     await client.login(process.env.DISCORD_TOKEN);
