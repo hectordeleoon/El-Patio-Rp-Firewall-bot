@@ -1,101 +1,104 @@
-const { EmbedBuilder } = require('discord.js');
-const Guild = require('../models/Guild');
+const { Events } = require('discord.js');
 const logger = require('../utils/logger');
 
-// Cache de mensajes por usuario para detectar spam
+// Mapa de mensajes por usuario para detectar spam
 const userMessages = new Map();
+const SPAM_LIMIT = parseInt(process.env.SPAM_MESSAGE_LIMIT) || 5;
+const TIME_WINDOW = parseInt(process.env.SPAM_TIME_WINDOW) || 5000; // 5 segundos
 
 module.exports = {
-  name: 'messageCreate',
-  
+  name: Events.MessageCreate,
   async execute(message) {
-    // Ignorar bots y DMs
-    if (message.author.bot || !message.guild) return;
+    // Ignorar bots
+    if (message.author.bot) return;
+    
+    // Ignorar DMs
+    if (!message.guild) return;
 
     try {
-      const guildConfig = await Guild.findOne({ guildId: message.guild.id });
+      // ============================================
+      // SISTEMA ANTI-SPAM
+      // ============================================
       
-      if (!guildConfig || !guildConfig.antiSpam.enabled) {
-        return;
-      }
-
       const userId = message.author.id;
       const now = Date.now();
-      
-      // Obtener mensajes recientes del usuario
+
+      // Obtener mensajes previos del usuario
       if (!userMessages.has(userId)) {
         userMessages.set(userId, []);
       }
-      
+
       const messages = userMessages.get(userId);
       
-      // Limpiar mensajes antiguos (fuera de la ventana de tiempo)
-      const timeWindow = parseInt(process.env.SPAM_TIME_WINDOW) || 5000;
-      const recentMessages = messages.filter(timestamp => now - timestamp < timeWindow);
-      
       // Agregar mensaje actual
-      recentMessages.push(now);
+      messages.push(now);
+
+      // Limpiar mensajes antiguos (fuera del tiempo de ventana)
+      const recentMessages = messages.filter(timestamp => now - timestamp < TIME_WINDOW);
       userMessages.set(userId, recentMessages);
-      
+
       // Verificar si excede el límite
-      const messageLimit = parseInt(process.env.SPAM_MESSAGE_LIMIT) || 5;
-      
-      if (recentMessages.length > messageLimit) {
-        logger.warn(`⚠️ Spam detectado: ${message.author.tag} envió ${recentMessages.length} mensajes en ${timeWindow}ms`);
+      if (recentMessages.length >= SPAM_LIMIT) {
         
+        // ✅ LOG DE SEGURIDAD - Spam detectado
+        await logger.logSeguridad({
+          description: `🚨 **SPAM DETECTADO**\n\n` +
+                       `👤 **Usuario:** ${message.author.tag} (${message.author.id})\n` +
+                       `📝 **Canal:** <#${message.channel.id}>\n` +
+                       `📊 **Mensajes:** ${recentMessages.length} en ${TIME_WINDOW/1000}s\n` +
+                       `⏰ **Hora:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+          fields: [
+            { name: '📊 Límite', value: `${SPAM_LIMIT} mensajes`, inline: true },
+            { name: '⏱️ Ventana', value: `${TIME_WINDOW/1000}s`, inline: true }
+          ]
+        });
+
+        // Aplicar timeout
         try {
-          // Aplicar timeout
-          await message.member.timeout(
-            10 * 60 * 1000, // 10 minutos
-            `Anti-Spam: ${recentMessages.length} mensajes en ${timeWindow / 1000}s`
-          );
+          await message.member.timeout(5 * 60 * 1000, 'Anti-Spam: mensajes excesivos');
           
-          // Borrar mensajes recientes del spammer
-          const channelMessages = await message.channel.messages.fetch({ limit: 50 });
-          const userSpamMessages = channelMessages.filter(
-            msg => msg.author.id === userId && now - msg.createdTimestamp < timeWindow
-          );
-          
-          await message.channel.bulkDelete(userSpamMessages);
-          
-          // Notificar
-          const logChannel = message.guild.channels.cache.find(
-            ch => ch.name === (process.env.LOGS_TIMEOUT || 'TIMEOUT')
-          );
-          
-          if (logChannel) {
-            const embed = new EmbedBuilder()
-              .setColor(0xFFA500)
-              .setTitle('⚠️ ANTI-SPAM ACTIVADO')
-              .setDescription(`**${message.author.tag}** fue sancionado por spam`)
-              .addFields(
-                { name: '👤 Usuario', value: `${message.author.tag} (${message.author.id})`, inline: true },
-                { name: '📊 Mensajes', value: `${recentMessages.length} en ${timeWindow / 1000}s`, inline: true },
-                { name: '⏱️ Sanción', value: 'Timeout de 10 minutos', inline: true }
-              )
-              .setTimestamp()
-              .setFooter({ text: 'El Patio RP Firewall' });
-            
-            await logChannel.send({ embeds: [embed] });
-          }
-          
-          // Limpiar cache del usuario
+          await logger.logTimeout({
+            description: `⏱️ **Timeout aplicado por spam**\n\n` +
+                         `👤 **Usuario:** ${message.author.tag}\n` +
+                         `⏰ **Duración:** 5 minutos\n` +
+                         `📝 **Razón:** Spam detectado (${recentMessages.length} mensajes)`,
+            fields: []
+          });
+
+          // Limpiar el registro del usuario
           userMessages.delete(userId);
-          
-          logger.success(`✅ Timeout aplicado a ${message.author.tag} por spam`);
-          
+
+          logger.warn(`⏱️ Timeout aplicado a ${message.author.tag} por spam`);
+
         } catch (error) {
-          logger.error('❌ Error al aplicar sanción por spam:', error);
+          logger.error(`❌ Error aplicando timeout a ${message.author.tag}:`, error.message);
+        }
+
+        // Intentar eliminar los mensajes spam
+        try {
+          const messagesToDelete = await message.channel.messages.fetch({ limit: SPAM_LIMIT });
+          const userSpamMessages = messagesToDelete.filter(msg => msg.author.id === userId);
+          await message.channel.bulkDelete(userSpamMessages, true);
+        } catch (error) {
+          logger.error('❌ Error eliminando mensajes spam:', error.message);
         }
       }
-      
+
+      // Limpiar el mapa periódicamente (cada 10 minutos)
+      if (Math.random() < 0.01) { // 1% de probabilidad por mensaje
+        const tenMinutesAgo = now - (10 * 60 * 1000);
+        for (const [uid, timestamps] of userMessages.entries()) {
+          const recent = timestamps.filter(t => t > tenMinutesAgo);
+          if (recent.length === 0) {
+            userMessages.delete(uid);
+          } else {
+            userMessages.set(uid, recent);
+          }
+        }
+      }
+
     } catch (error) {
       logger.error('❌ Error en messageCreate:', error);
     }
   }
 };
-
-// Limpiar cache cada 5 minutos
-setInterval(() => {
-  userMessages.clear();
-}, 5 * 60 * 1000);
